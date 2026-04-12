@@ -16,6 +16,9 @@ from bs4 import BeautifulSoup
 URL = "https://www.pciconcursos.com.br/concursos/"
 ESTADO = "MINAS GERAIS"
 OUTPUT_DIR = "output"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+}
 
 CIDADES = [
     "Belo Horizonte", "Betim", "Contagem", "Ribeirão das Neves",
@@ -63,7 +66,7 @@ KEYWORDS = [
 
 
 def buscar_concursos():
-    html = requests.get(URL, timeout=30).text
+    html = requests.get(URL, headers=HEADERS, timeout=30).text
     soup = BeautifulSoup(html, "html.parser")
 
     # Encontra a div do estado pelo texto
@@ -110,7 +113,7 @@ def filtrar_regiao(df):
 
 def buscar_cargos(url):
     try:
-        html = requests.get(url, timeout=30).text
+        html = requests.get(url, headers=HEADERS, timeout=30).text
         soup = BeautifulSoup(html, "html.parser")
         article = soup.find("article", id="noticia")
         if not article:

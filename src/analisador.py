@@ -12,6 +12,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+}
+
 PROMPT_ANALISE = """
 Analise este edital de concurso público e extraia APENAS informações
 sobre cargos da área de Tecnologia da Informação.
@@ -41,7 +45,7 @@ class Analyzer(ABC):
     def _buscar_link_edital(self, url):
         """Visita a página da notícia e pega o primeiro PDF de edital."""
         try:
-            html = requests.get(url, timeout=30).text
+            html = requests.get(url, headers=HEADERS, timeout=30).text
             soup = BeautifulSoup(html, "html.parser")
 
             aside = soup.find("aside", id="links")
@@ -60,7 +64,7 @@ class Analyzer(ABC):
     def _baixar_pdf(self, url):
         """Baixa o PDF e retorna os bytes."""
         try:
-            resp = requests.get(url, timeout=60)
+            resp = requests.get(url, headers=HEADERS, timeout=60)
             if resp.status_code == 200 and len(resp.content) > 0:
                 return resp.content
             return None
