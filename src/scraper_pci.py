@@ -64,32 +64,39 @@ KEYWORDS = [
 
 def buscar_concursos():
     html = requests.get(URL, timeout=30).text
-    inicio = html.find(f'<div class="uf">{ESTADO}</div>')
-    fim = html.find('<div class="uf">', inicio + 1)
-    trecho = BeautifulSoup(html[inicio:fim], "html.parser")
+    soup = BeautifulSoup(html, "html.parser")
 
+    # Encontra a div do estado pelo texto
+    uf_div = soup.find("div", class_="uf", string=ESTADO)
+    if not uf_div:
+        return pd.DataFrame()
+
+    # Pega todos os concursos entre esse estado e o próximo
     concursos = []
-    for item in trecho.find_all(class_="ca"):
+    for item in uf_div.find_all_next(class_="ca"):
+        # Para quando chegar no próximo estado
+        uf_anterior = item.find_previous("div", class_="uf")
+        if uf_anterior and uf_anterior.get_text(strip=True) != ESTADO:
+            break
+
         link_tag = item.find("a", href=True)
         cd_tag = item.find(class_="cd")
-        data_tag = str(item.find(class_="ce") or "")
-        detalhes = str(cd_tag or "")
+        ce_tag = item.find(class_="ce")
 
-        # Extrai o nome do cargo do primeiro span dentro de .cd
         cargo = ""
         if cd_tag:
             span = cd_tag.find("span")
             if span:
-                cargo = span.find(string=True, recursive=False)
-                cargo = cargo.strip() if cargo else ""
+                texto = span.find(string=True, recursive=False)
+                cargo = texto.strip() if texto else ""
 
         concursos.append({
-            "Concurso": link_tag.text.strip() if link_tag else "",
+            "Concurso": link_tag.get_text(strip=True) if link_tag else "",
             "Cargo": cargo,
-            "Vagas": "".join(re.findall(r"(\d+) vaga", detalhes)) or "-",
-            "Nível": "/".join(re.findall(r"Superior|Médio", detalhes)) or "-",
-            "Salário Até": "".join(re.findall(r"R\$ *[\d.,]+", detalhes)) or "-",
-            "Inscrição Até": "".join(re.findall(r"\d+/\d+/\d+", data_tag)) or "-",
+            "Vagas": "".join(re.findall(r"(\d+) vaga", cd_tag.get_text() if cd_tag else "")) or "-",
+            "Nível": "/".join(re.findall(r"Superior|Médio", cd_tag.get_text() if cd_tag else "")) or "-",
+            "Salário Até": "".join(re.findall(r"R\$ *[\d.,]+", cd_tag.get_text() if cd_tag else "")) or "-",
+            "Inscrição Até": "".join(re.findall(r"\d+/\d+/\d+", ce_tag.get_text() if ce_tag else "")) or "-",
             "Link": link_tag["href"] if link_tag else "",
         })
 
