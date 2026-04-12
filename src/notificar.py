@@ -102,7 +102,10 @@ class EmailNotifier(Notifier):
         corpo = f"{len(df)} concurso(s) novo(s)!\n\n"
         for _, row in df.iterrows():
             corpo += f"- {row['Concurso']} | {row.get('Salário Até', '-')} | Até {row.get('Inscrição Até', '-')}\n"
-            corpo += f"  {row['Link']}\n\n"
+            corpo += f"  {row['Link']}\n"
+            if "Análise IA" in row and pd.notna(row["Análise IA"]):
+                corpo += f"\n  Análise do edital:\n{row['Análise IA']}\n"
+            corpo += "\n"
 
         msg = MIMEText(corpo)
         msg["Subject"] = f"🔔 {len(df)} concurso(s) novo(s)"
