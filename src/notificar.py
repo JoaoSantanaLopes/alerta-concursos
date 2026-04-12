@@ -17,12 +17,17 @@ def _formatar(row):
     if "Cargos Encontrados" in row and pd.notna(row["Cargos Encontrados"]):
         cargos = f"💼 {row['Cargos Encontrados']}\n"
 
+    analise = ""
+    if "Análise IA" in row and pd.notna(row["Análise IA"]):
+        analise = f"\n🤖 *Análise do edital:*\n{row['Análise IA']}\n"
+
     return (
         f"📌 *{row['Concurso']}*\n"
         f"💰 {row.get('Salário Até', '-')} | 🎓 {row.get('Nível', '-')} | 👥 {row.get('Vagas', '-')} vaga(s)\n"
         f"📅 Inscrição até: {row.get('Inscrição Até', '-')}\n"
         f"{cargos}"
         f"🔗 [Ver edital]({row['Link']})\n"
+        f"{analise}"
     )
 
 
