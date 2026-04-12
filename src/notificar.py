@@ -17,17 +17,22 @@ def _formatar(row):
     if "Cargos Encontrados" in row and pd.notna(row["Cargos Encontrados"]):
         cargos = f"💼 {row['Cargos Encontrados']}\n"
 
-    analise = ""
-    if "Análise IA" in row and pd.notna(row["Análise IA"]):
-        analise = f"\n🤖 *Análise do edital:*\n{row['Análise IA']}\n"
-
     return (
         f"📌 *{row['Concurso']}*\n"
         f"💰 {row.get('Salário Até', '-')} | 🎓 {row.get('Nível', '-')} | 👥 {row.get('Vagas', '-')} vaga(s)\n"
         f"📅 Inscrição até: {row.get('Inscrição Até', '-')}\n"
         f"{cargos}"
         f"🔗 [Ver edital]({row['Link']})\n"
-        f"{analise}"
+    )
+
+
+def _formatar_analise(row):
+    return (
+        f"📌 {row['Concurso']}\n"
+        f"💰 {row.get('Salário Até', '-')} | 🎓 {row.get('Nível', '-')} | 👥 {row.get('Vagas', '-')} vaga(s)\n"
+        f"📅 Inscrição até: {row.get('Inscrição Até', '-')}\n"
+        f"🔗 {row['Link']}\n"
+        f"\n🤖 Análise do edital:\n{row['Análise IA']}\n"
     )
 
 
@@ -50,26 +55,29 @@ class TelegramNotifier(Notifier):
         if df.empty:
             return
 
-        header = f"🔔 *{len(df)} concurso(s) novo(s)!*\n"
-        texto = header
+        self._postar(f"🔔 *{len(df)} concurso(s) novo(s)!*", markdown=True)
 
         for _, row in df.iterrows():
-            msg = "\n" + _formatar(row)
-            if len(texto) + len(msg) > 4000:
-                self._postar(texto)
-                texto = ""
-            texto += msg
+            tem_analise = "Análise IA" in row and pd.notna(row["Análise IA"])
 
-        if texto.strip():
-            self._postar(texto)
+            if tem_analise:
+                msg = _formatar_analise(row)
+                if len(msg.encode("utf-8")) > 4000:
+                    msg = msg[:2000] + "\n\n... (análise truncada)"
+                self._postar(msg, markdown=False)
+            else:
+                self._postar(_formatar(row), markdown=True)
 
-    def _postar(self, texto):
-        resp = requests.post(self.url, json={
+    def _postar(self, texto, markdown=True):
+        payload = {
             "chat_id": self.chat_id,
             "text": texto,
-            "parse_mode": "Markdown",
             "disable_web_page_preview": True,
-        }, timeout=30)
+        }
+        if markdown:
+            payload["parse_mode"] = "Markdown"
+
+        resp = requests.post(self.url, json=payload, timeout=30)
 
         if not resp.ok:
             raise RuntimeError(f"Erro Telegram: {resp.status_code} - {resp.text}")
@@ -78,7 +86,6 @@ class TelegramNotifier(Notifier):
 class EmailNotifier(Notifier):
 
     def __init__(self):
-        import smtplib
         self.smtp_host = os.getenv("SMTP_HOST")
         self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
         self.smtp_user = os.getenv("SMTP_USER")

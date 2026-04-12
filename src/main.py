@@ -1,12 +1,12 @@
 import os
 from dotenv import load_dotenv
-from scraper_pci import buscar_concursos, filtrar_regiao, filtrar_por_area
+from scraper_pci import buscar_concursos, filtrar_regiao, filtrar_por_area, filtrar_por_data
 from repository import criar_repositorio, filtrar_novos, salvar_notificados
 from notificar import criar_notificador
 
 load_dotenv()
 
-ANALISE_IA = True
+ANALISE_IA = os.getenv("ANALISE_IA", "false").lower() == "true"
 
 if __name__ == "__main__":
     try:
@@ -15,6 +15,9 @@ if __name__ == "__main__":
 
         print("Filtrando região...")
         df_regiao = filtrar_regiao(df_todos)
+
+        print("Filtrando por data...")
+        df_regiao = filtrar_por_data(df_regiao)
 
         print("Verificando vagas por área...")
         df_area = filtrar_por_area(df_regiao)

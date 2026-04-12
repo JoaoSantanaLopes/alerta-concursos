@@ -138,6 +138,22 @@ def filtrar_por_area(df):
     return pd.DataFrame(resultados) if resultados else pd.DataFrame()
 
 
+def filtrar_por_data(df):
+    """Remove concursos cuja inscrição já encerrou."""
+    from datetime import date
+
+    def ainda_aberto(data_str):
+        if not data_str or data_str == "-":
+            return True
+        try:
+            partes = data_str.split("/")
+            return date(int(partes[2]), int(partes[1]), int(partes[0])) >= date.today()
+        except (ValueError, IndexError):
+            return True
+
+    return df[df["Inscrição Até"].apply(ainda_aberto)].reset_index(drop=True)
+
+
 # === EXECUÇÃO ===
 
 if __name__ == "__main__":

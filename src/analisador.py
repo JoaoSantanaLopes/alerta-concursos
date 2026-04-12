@@ -13,20 +13,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 PROMPT_ANALISE = """
-Analise este edital de concurso público e extraia as seguintes informações
-APENAS sobre os cargos da área de Tecnologia da Informação:
+Analise este edital de concurso público e extraia APENAS informações
+sobre cargos da área de Tecnologia da Informação.
 
-1. Nome do(s) cargo(s) de TI
-2. Número de vagas (imediatas e cadastro reserva)
-3. Salário
-4. Requisitos (formação, experiência, certificações)
-5. Conteúdo programático da prova (se disponível)
-6. Data da prova (se disponível)
-7. Regime de trabalho (CLT, estatutário, temporário)
-8. Carga horária
+Responda no formato abaixo, sem formatação markdown, sem negrito, sem asteriscos:
+
+Cargo: (nome)
+Vagas: (imediatas + cadastro reserva)
+Salário: (valor)
+Requisitos: (formação e experiência em uma linha)
+Data da prova: (data ou "não informada")
+Regime: (CLT/estatutário/temporário)
+Carga horária: (horas semanais)
+Conteúdo da prova: (listar os principais temas em uma linha, separados por vírgula)
 
 Se não houver cargos de TI, responda apenas: "Sem cargos de TI neste edital."
-Responda de forma objetiva e direta, sem introduções.
+Seja breve. Máximo 500 palavras.
 """
 
 
