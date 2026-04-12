@@ -38,28 +38,6 @@ class Analyzer(ABC):
     def analisar(self, url_noticia):
         pass
 
-
-class GeminiAnalyzer(Analyzer):
-
-    def __init__(self):
-        from google import genai
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY não configurada no .env")
-        self.client = genai.Client(api_key=api_key)
-        self.modelo = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-
-    def analisar(self, url_noticia):
-        pdf_url = self._buscar_link_edital(url_noticia)
-        if not pdf_url:
-            return "Link do edital não encontrado na página."
-
-        pdf_bytes = self._baixar_pdf(pdf_url)
-        if not pdf_bytes:
-            return "Não foi possível baixar o edital."
-
-        return self._enviar_para_gemini(pdf_bytes)
-
     def _buscar_link_edital(self, url):
         """Visita a página da notícia e pega o primeiro PDF de edital."""
         try:
@@ -88,6 +66,27 @@ class GeminiAnalyzer(Analyzer):
             return None
         except Exception:
             return None
+
+class GeminiAnalyzer(Analyzer):
+
+    def __init__(self):
+        from google import genai
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY não configurada no .env")
+        self.client = genai.Client(api_key=api_key)
+        self.modelo = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+    def analisar(self, url_noticia):
+        pdf_url = self._buscar_link_edital(url_noticia)
+        if not pdf_url:
+            return "Link do edital não encontrado na página."
+
+        pdf_bytes = self._baixar_pdf(pdf_url)
+        if not pdf_bytes:
+            return "Não foi possível baixar o edital."
+
+        return self._enviar_para_gemini(pdf_bytes)
 
     def _enviar_para_gemini(self, pdf_bytes):
         """Envia o PDF pro Gemini e retorna a análise."""
