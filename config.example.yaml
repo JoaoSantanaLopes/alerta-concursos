@@ -1,0 +1,151 @@
+# Preferências de busca.
+
+regiao:
+  estado: MINAS GERAIS
+
+  cidades:
+    - Belo Horizonte
+    - Betim
+    - Contagem
+    - Ribeirão das Neves
+    - Santa Luzia
+    - Ibirité
+    - Sabará
+    - Nova Lima
+    - Vespasiano
+    - Pedro Leopoldo
+    - Lagoa Santa
+    - Matozinhos
+    - Esmeraldas
+    - Brumadinho
+    - Caeté
+    - Igarapé
+    - Juatuba
+    - Mateus Leme
+    - São José da Lapa
+    - Confins
+    - Mario Campos
+    - Sarzedo
+    - Raposos
+    - Rio Acima
+    - Nova União
+    - Taquaraçu de Minas
+    - Jaboticatubas
+    - Baldim
+    - Capim Branco
+    - Florestal
+    - Itabirito
+    - Itaguara
+    - Itatiaiuçu
+    - Rio Manso
+    - São Joaquim de Bicas
+
+  orgaos:
+    - FHEMIG
+    - CEMIG
+    - COPASA
+    - CBMMG
+    - PM - Polícia Militar
+    - PC - Polícia Civil
+    - SEJUSP
+    - SEPLAG
+    - SEE
+    - "SES "
+    - TJ - Tribunal de Justiça
+    - "TRE - "
+    - "TRF - "
+    - "TRT - "
+    - "MPE - "
+    - MP - Ministério Público
+    - "TCE - "
+    - TCEMG
+    - "DPE - "
+    - Defensoria Pública
+    - "AGE - "
+    - IPSEMG
+    - JUCEMG
+    - Prodemge
+    - Prodabel
+    - "MGS "
+    - UFMG
+    - CEFET
+    - IFMG
+    - EBSERH
+    - BDMG
+    - Hemominas
+    - Corpo de Bombeiros Militar de Minas
+    - Polícia Militar de Minas
+    - Polícia Civil de Minas
+    - Tribunal de Justiça do Estado de Minas
+    - Secretaria de Estado
+
+area:
+  keywords:
+    - tecnologia da informação
+    - analista de sistemas
+    - analista de ti
+    - analista de informática
+    - técnico em informática
+    - técnico de informática
+    - técnico de tecnologia
+    - técnico em tecnologia
+    - suporte de ti
+    - suporte em ti
+    - infraestrutura de ti
+    - segurança da informação
+    - banco de dados
+    - administrador de banco
+    - desenvolvedor
+    - programador
+    - programação
+    - ciência de dados
+    - cientista de dados
+    - governança de ti
+    - gestão de ti
+    - sistemas de informação
+    - engenheiro de software
+    - devops
+    - web designer
+    - webdesigner
+    - informática
+
+output_dir: output
+
+notificacao:
+  canal: telegram  # telegram | email
+
+  email:
+    smtp_host: smtp.gmail.com
+    smtp_port: 587
+
+banco:
+  tipo: sqlite              # sqlite | postgres
+  caminho: output/notificados.db   # usado só quando tipo=sqlite
+
+analise_ia:
+  habilitado: false
+  tipo: gemini
+  modelo: gemini-2.5-flash
+
+  # Prompt enviado ao modelo junto com o PDF do edital.
+  # IMPORTANTE: o resultado é enviado direto na notificação.
+  # - NÃO peça markdown (Telegram envia análise como texto puro)
+  # - Mantenha o limite de ~500 palavras (mensagens longas são truncadas)
+  prompt: |
+    Analise este edital de concurso público e extraia APENAS informações
+    sobre cargos da área de Tecnologia da Informação.
+
+    Responda no formato abaixo, sem formatação markdown, sem negrito, sem asteriscos:
+
+    Cargo: (nome)
+    Vagas: (imediatas + cadastro reserva)
+    Salário: (valor)
+    Requisitos: (formação e experiência em uma linha)
+    Data da prova: (data ou "não informada")
+    Regime: (CLT/estatutário/temporário)
+    Carga horária: (horas semanais)
+    Conteúdo da prova: (listar os principais temas em uma linha, separados por vírgula)
+
+    Se não houver cargos de TI, responda apenas: "Sem cargos de TI neste edital."
+
+    Seja breve. Máximo 500 palavras.

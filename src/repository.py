@@ -1,35 +1,34 @@
 """
 Camada de persistência.
-Para trocar de banco, mude DB_TYPE no .env.
+Tipo de banco e caminho do SQLite vêm do config.yaml.
+Credenciais de Postgres vêm do .env.
 """
-
 import os
 import sqlite3
 from abc import ABC, abstractmethod
 import pandas as pd
-from dotenv import load_dotenv
-
-load_dotenv()
+from config import BancoConfig
 
 
 class Repository(ABC):
-
     @abstractmethod
-    def ja_notificado(self, link):
+    def ja_notificado(self, link: str) -> bool:
         pass
 
     @abstractmethod
-    def salvar(self, link, concurso):
+    def salvar(self, link: str, concurso: str) -> None:
         pass
 
     @abstractmethod
-    def fechar(self):
+    def fechar(self) -> None:
         pass
 
 
 class SQLiteRepository(Repository):
+    def __init__(self, caminho: str):
+        # Garante que o diretório existe antes de conectar
+        os.makedirs(os.path.dirname(caminho) or ".", exist_ok=True)
 
-    def __init__(self, caminho="output/notificados.db"):
         self.conn = sqlite3.connect(caminho)
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS notificados (
@@ -58,17 +57,17 @@ class SQLiteRepository(Repository):
 
 
 class PostgresRepository(Repository):
-
-    def __init__(self):
+    def __init__(self, host: str, database: str, user: str, password: str, port: str = "5432"):
         import psycopg2
         self.conn = psycopg2.connect(
-            host=os.getenv("DB_HOST"),
-            database=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-            port=os.getenv("DB_PORT", "5432"),
+            host=host,
+            database=database,
+            user=user,
+            password=password,
+            port=port,
         )
-        self.conn.execute("""
+        cur = self.conn.cursor()
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS notificados (
                 link TEXT PRIMARY KEY,
                 concurso TEXT,
@@ -76,6 +75,7 @@ class PostgresRepository(Repository):
             )
         """)
         self.conn.commit()
+        cur.close()
 
     def ja_notificado(self, link):
         cur = self.conn.cursor()
@@ -97,16 +97,23 @@ class PostgresRepository(Repository):
         self.conn.close()
 
 
-def criar_repositorio():
-    """Factory: cria o repositório certo baseado no DB_TYPE do .env."""
-    db_type = os.getenv("DB_TYPE", "sqlite")
+def criar_repositorio(cfg: BancoConfig) -> Repository:
+    if cfg.tipo == "sqlite":
+        return SQLiteRepository(cfg.caminho)
 
-    if db_type == "sqlite":
-        return SQLiteRepository(os.getenv("DB_PATH", "output/notificados.db"))
-    elif db_type == "postgres":
-        return PostgresRepository()
-    else:
-        raise ValueError(f"DB_TYPE '{db_type}' não suportado")
+    if cfg.tipo == "postgres":
+        host = os.getenv("DB_HOST")
+        database = os.getenv("DB_NAME")
+        user = os.getenv("DB_USER")
+        password = os.getenv("DB_PASSWORD")
+        port = os.getenv("DB_PORT", "5432")
+        if not all([host, database, user, password]):
+            raise ValueError(
+                "Para Postgres, DB_HOST, DB_NAME, DB_USER e DB_PASSWORD devem estar no .env"
+            )
+        return PostgresRepository(host, database, user, password, port)
+
+    raise ValueError(f"banco.tipo '{cfg.tipo}' não suportado")
 
 
 def filtrar_novos(df, repositorio):

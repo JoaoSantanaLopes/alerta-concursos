@@ -1,45 +1,22 @@
 """
 Módulo de análise de editais por IA.
-Para trocar de provedor, mude ANALYZER_TYPE no .env.
-Desative com ANALISE_IA=false.
+Tipo de analisador, modelo e prompt vêm do config.yaml.
+Credencial (API key) vem do .env.
 """
-
 import os
-import requests
 from abc import ABC, abstractmethod
+import requests
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
-
-load_dotenv()
+from config import AnaliseIAConfig
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 }
 
-PROMPT_ANALISE = """
-Analise este edital de concurso público e extraia APENAS informações
-sobre cargos da área de Tecnologia da Informação.
-
-Responda no formato abaixo, sem formatação markdown, sem negrito, sem asteriscos:
-
-Cargo: (nome)
-Vagas: (imediatas + cadastro reserva)
-Salário: (valor)
-Requisitos: (formação e experiência em uma linha)
-Data da prova: (data ou "não informada")
-Regime: (CLT/estatutário/temporário)
-Carga horária: (horas semanais)
-Conteúdo da prova: (listar os principais temas em uma linha, separados por vírgula)
-
-Se não houver cargos de TI, responda apenas: "Sem cargos de TI neste edital."
-Seja breve. Máximo 500 palavras.
-"""
-
 
 class Analyzer(ABC):
-
     @abstractmethod
-    def analisar(self, url_noticia):
+    def analisar(self, url_noticia: str) -> str:
         pass
 
     def _buscar_link_edital(self, url):
@@ -47,16 +24,13 @@ class Analyzer(ABC):
         try:
             html = requests.get(url, headers=HEADERS, timeout=30).text
             soup = BeautifulSoup(html, "html.parser")
-
             aside = soup.find("aside", id="links")
             if not aside:
                 return None
-
             for pdf in aside.find_all("li", class_="pdf"):
                 link = pdf.find("a", href=True)
                 if link and "edital" in link.get_text(strip=True).lower():
                     return link["href"]
-
             return None
         except Exception:
             return None
@@ -72,44 +46,38 @@ class Analyzer(ABC):
             return None
 
 class GeminiAnalyzer(Analyzer):
-
-    def __init__(self):
+    def __init__(self, api_key: str, modelo: str, prompt: str):
         from google import genai
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY não configurada no .env")
         self.client = genai.Client(api_key=api_key)
-        self.modelo = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self.modelo = modelo
+        self.prompt = prompt
 
     def analisar(self, url_noticia):
         pdf_url = self._buscar_link_edital(url_noticia)
         if not pdf_url:
             return "Link do edital não encontrado na página."
-
         pdf_bytes = self._baixar_pdf(pdf_url)
         if not pdf_bytes:
             return "Não foi possível baixar o edital."
-
         return self._enviar_para_gemini(pdf_bytes)
 
     def _enviar_para_gemini(self, pdf_bytes):
-        """Envia o PDF pro Gemini e retorna a análise."""
         from google.genai import types
-
         response = self.client.models.generate_content(
             model=self.modelo,
             contents=[
                 types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
-                PROMPT_ANALISE,
+                self.prompt,
             ],
         )
         return response.text
 
 
-def criar_analisador():
-    tipo = os.getenv("ANALYZER_TYPE", "gemini")
+def criar_analisador(cfg: AnaliseIAConfig) -> Analyzer:
+    if cfg.tipo == "gemini":
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY não definida no .env")
+        return GeminiAnalyzer(api_key, cfg.modelo, cfg.prompt)
 
-    if tipo == "gemini":
-        return GeminiAnalyzer()
-    else:
-        raise ValueError(f"ANALYZER_TYPE '{tipo}' não suportado")
+    raise ValueError(f"analise_ia.tipo '{cfg.tipo}' não suportado")

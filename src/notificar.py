@@ -1,22 +1,25 @@
 """
 Módulo de notificação.
-Para trocar o canal, mude NOTIFIER_TYPE no .env.
+Preferência de canal e hostname SMTP vêm do config.yaml.
+Segredos e dados pessoais (token, chat_id, email, senha) vêm do .env.
 """
-
 import os
-import requests
-import pandas as pd
+import smtplib
 from abc import ABC, abstractmethod
-from dotenv import load_dotenv
+from email.mime.text import MIMEText
 
-load_dotenv()
+import pandas as pd
+import requests
+
+from config import EmailConfig, NotificacaoConfig
+
 
 # === FORMATAÇÃO ===
+
 def _formatar(row):
     cargos = ""
     if "Cargos Encontrados" in row and pd.notna(row["Cargos Encontrados"]):
         cargos = f"💼 {row['Cargos Encontrados']}\n"
-
     return (
         f"📌 *{row['Concurso']}*\n"
         f"💰 {row.get('Salário Até', '-')} | 🎓 {row.get('Nível', '-')} | 👥 {row.get('Vagas', '-')} vaga(s)\n"
@@ -37,29 +40,24 @@ def _formatar_analise(row):
 
 
 # === CLASSES ===
-class Notifier(ABC):
 
+class Notifier(ABC):
     @abstractmethod
-    def enviar(self, df):
+    def enviar(self, df: pd.DataFrame) -> None:
         pass
 
 
 class TelegramNotifier(Notifier):
-
-    def __init__(self):
-        self.token = os.getenv("BOT_TOKEN")
-        self.chat_id = os.getenv("CHAT_ID")
-        self.url = f"https://api.telegram.org/bot{self.token}/sendMessage"
+    def __init__(self, token: str, chat_id: str):
+        self.chat_id = chat_id
+        self.url = f"https://api.telegram.org/bot{token}/sendMessage"
 
     def enviar(self, df):
         if df.empty:
             return
-
         self._postar(f"🔔 *{len(df)} concurso(s) novo(s)!*", markdown=True)
-
         for _, row in df.iterrows():
             tem_analise = "Análise IA" in row and pd.notna(row["Análise IA"])
-
             if tem_analise:
                 msg = _formatar_analise(row)
                 if len(msg.encode("utf-8")) > 4000:
@@ -76,28 +74,22 @@ class TelegramNotifier(Notifier):
         }
         if markdown:
             payload["parse_mode"] = "Markdown"
-
         resp = requests.post(self.url, json=payload, timeout=30)
-
         if not resp.ok:
             raise RuntimeError(f"Erro Telegram: {resp.status_code} - {resp.text}")
 
 
 class EmailNotifier(Notifier):
-
-    def __init__(self):
-        self.smtp_host = os.getenv("SMTP_HOST")
-        self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        self.smtp_user = os.getenv("SMTP_USER")
-        self.smtp_password = os.getenv("SMTP_PASSWORD")
-        self.destinatario = os.getenv("EMAIL_TO")
+    def __init__(self, cfg: EmailConfig, user: str, password: str, destinatario: str):
+        self.smtp_host = cfg.smtp_host
+        self.smtp_port = cfg.smtp_port
+        self.user = user
+        self.password = password
+        self.destinatario = destinatario
 
     def enviar(self, df):
         if df.empty:
             return
-
-        import smtplib
-        from email.mime.text import MIMEText
 
         corpo = f"{len(df)} concurso(s) novo(s)!\n\n"
         for _, row in df.iterrows():
@@ -109,21 +101,31 @@ class EmailNotifier(Notifier):
 
         msg = MIMEText(corpo)
         msg["Subject"] = f"🔔 {len(df)} concurso(s) novo(s)"
-        msg["From"] = self.smtp_user
+        msg["From"] = self.user
         msg["To"] = self.destinatario
 
         with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
             server.starttls()
-            server.login(self.smtp_user, self.smtp_password)
+            server.login(self.user, self.password)
             server.send_message(msg)
 
 
-def criar_notificador():
-    tipo = os.getenv("NOTIFIER_TYPE", "telegram")
+def criar_notificador(cfg: NotificacaoConfig) -> Notifier:
+    if cfg.canal == "telegram":
+        token = os.getenv("BOT_TOKEN")
+        chat_id = os.getenv("CHAT_ID")
+        if not token or not chat_id:
+            raise ValueError("BOT_TOKEN e CHAT_ID devem estar definidos no .env")
+        return TelegramNotifier(token, chat_id)
 
-    if tipo == "telegram":
-        return TelegramNotifier()
-    elif tipo == "email":
-        return EmailNotifier()
-    else:
-        raise ValueError(f"NOTIFIER_TYPE '{tipo}' não suportado")
+    if cfg.canal == "email":
+        if cfg.email is None:
+            raise ValueError("Canal 'email' selecionado mas bloco 'email' ausente no config.yaml")
+        user = os.getenv("SMTP_USER")
+        password = os.getenv("SMTP_PASSWORD")
+        destinatario = os.getenv("EMAIL_TO")
+        if not all([user, password, destinatario]):
+            raise ValueError("SMTP_USER, SMTP_PASSWORD e EMAIL_TO devem estar no .env")
+        return EmailNotifier(cfg.email, user, password, destinatario)
+
+    raise ValueError(f"Canal '{cfg.canal}' não suportado")

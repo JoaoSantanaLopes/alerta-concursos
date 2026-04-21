@@ -1,85 +1,33 @@
 """
-Scraper PCI Concursos
+Scraper PCI Concursos.
 Busca concursos por estado, filtra por região e área de interesse.
-Edite as variáveis abaixo para personalizar.
+Os filtros são passados pelo chamador.
 """
-
 import re
 import time
-import os
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
 
-# === CONFIGURAÇÃO ===
 
 URL = "https://www.pciconcursos.com.br/concursos/"
-ESTADO = "MINAS GERAIS"
-OUTPUT_DIR = "output"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 }
 
-CIDADES = [
-    "Belo Horizonte", "Betim", "Contagem", "Ribeirão das Neves",
-    "Santa Luzia", "Ibirité", "Sabará", "Nova Lima", "Vespasiano",
-    "Pedro Leopoldo", "Lagoa Santa", "Matozinhos", "Esmeraldas",
-    "Brumadinho", "Caeté", "Igarapé", "Juatuba", "Mateus Leme",
-    "São José da Lapa", "Confins", "Mario Campos", "Sarzedo",
-    "Raposos", "Rio Acima", "Nova União", "Taquaraçu de Minas",
-    "Jaboticatubas", "Baldim", "Capim Branco", "Florestal",
-    "Itabirito", "Itaguara", "Itatiaiuçu", "Rio Manso",
-    "São Joaquim de Bicas",
-]
 
-ORGAOS = [
-    "FHEMIG", "CEMIG", "COPASA", "CBMMG", "PM - Polícia Militar",
-    "PC - Polícia Civil", "SEJUSP", "SEPLAG", "SEE", "SES ",
-    "TJ - Tribunal de Justiça", "TRE - ", "TRF - ", "TRT - ",
-    "MPE - ", "MP - Ministério Público", "TCE - ", "TCEMG",
-    "DPE - ", "Defensoria Pública", "AGE - ", "IPSEMG", "JUCEMG",
-    "Prodemge", "Prodabel", "MGS ", "UFMG", "CEFET", "IFMG",
-    "EBSERH", "BDMG", "Hemominas",
-    "Corpo de Bombeiros Militar de Minas",
-    "Polícia Militar de Minas", "Polícia Civil de Minas",
-    "Tribunal de Justiça do Estado de Minas",
-    "Secretaria de Estado",
-]
-
-KEYWORDS = [
-    "tecnologia da informação", "analista de sistemas",
-    "analista de ti", "analista de informática",
-    "técnico em informática", "técnico de informática",
-    "técnico de tecnologia", "técnico em tecnologia",
-    "suporte de ti", "suporte em ti",
-    "infraestrutura de ti", "segurança da informação",
-    "banco de dados", "administrador de banco",
-    "desenvolvedor", "programador", "programação",
-    "ciência de dados", "cientista de dados",
-    "governança de ti", "gestão de ti",
-    "sistemas de informação", "engenheiro de software",
-    "devops", "web designer", "webdesigner",
-    "informática",
-]
-
-# === FUNÇÕES ===
-
-
-def buscar_concursos():
+def buscar_concursos(estado: str) -> pd.DataFrame:
     html = requests.get(URL, headers=HEADERS, timeout=30).text
     soup = BeautifulSoup(html, "html.parser")
 
-    # Encontra a div do estado pelo texto
-    uf_div = soup.find("div", class_="uf", string=ESTADO)
+    uf_div = soup.find("div", class_="uf", string=estado)
     if not uf_div:
         return pd.DataFrame()
 
-    # Pega todos os concursos entre esse estado e o próximo
     concursos = []
     for item in uf_div.find_all_next(class_="ca"):
-        # Para quando chegar no próximo estado
         uf_anterior = item.find_previous("div", class_="uf")
-        if uf_anterior and uf_anterior.get_text(strip=True) != ESTADO:
+        if uf_anterior and uf_anterior.get_text(strip=True) != estado:
             break
 
         link_tag = item.find("a", href=True)
@@ -106,12 +54,12 @@ def buscar_concursos():
     return pd.DataFrame(concursos)
 
 
-def filtrar_regiao(df):
-    padrao = "|".join(CIDADES + ORGAOS)
+def filtrar_regiao(df: pd.DataFrame, cidades: list[str], orgaos: list[str]) -> pd.DataFrame:
+    padrao = "|".join(cidades + orgaos)
     return df[df["Concurso"].str.contains(padrao, case=False, na=False)].reset_index(drop=True)
 
 
-def buscar_cargos(url):
+def buscar_cargos(url: str) -> list[str]:
     try:
         html = requests.get(url, headers=HEADERS, timeout=30).text
         soup = BeautifulSoup(html, "html.parser")
@@ -129,15 +77,15 @@ def buscar_cargos(url):
         return []
 
 
-def tem_vaga(cargos):
-    return [c for c in cargos if any(kw in c.lower() for kw in KEYWORDS)]
+def tem_vaga(cargos: list[str], keywords: list[str]) -> list[str]:
+    return [c for c in cargos if any(kw in c.lower() for kw in keywords)]
 
 
-def filtrar_por_area(df):
+def filtrar_por_area(df: pd.DataFrame, keywords: list[str]) -> pd.DataFrame:
     resultados = []
 
     for _, row in df.iterrows():
-        cargos_encontrados = tem_vaga(buscar_cargos(row["Link"]))
+        cargos_encontrados = tem_vaga(buscar_cargos(row["Link"]), keywords)
         if cargos_encontrados:
             linha = row.to_dict()
             linha["Cargos Encontrados"] = " | ".join(cargos_encontrados)
@@ -148,7 +96,7 @@ def filtrar_por_area(df):
     return pd.DataFrame(resultados) if resultados else pd.DataFrame()
 
 
-def filtrar_por_data(df):
+def filtrar_por_data(df: pd.DataFrame) -> pd.DataFrame:
     """Remove concursos cuja inscrição já encerrou."""
     from datetime import date
 
@@ -162,29 +110,3 @@ def filtrar_por_data(df):
             return True
 
     return df[df["Inscrição Até"].apply(ainda_aberto)].reset_index(drop=True)
-
-
-# === EXECUÇÃO ===
-
-if __name__ == "__main__":
-    print("Buscando concursos...")
-    df_todos = buscar_concursos()
-
-    print("Filtrando região...")
-    df_regiao = filtrar_regiao(df_todos)
-
-    print("Verificando vagas por área...")
-    df_area = filtrar_por_area(df_regiao)
-
-    def salvar(df, nome):
-        colunas = [c for c in df.columns if c != "Link"] + ["Link"]
-        df[colunas].to_csv(f"{OUTPUT_DIR}/{nome}", index=False, encoding="utf-8")
-
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    salvar(df_todos, "concursos_estado.csv")
-    salvar(df_regiao, "concursos_regiao.csv")
-    if not df_area.empty:
-        salvar(df_area, "concursos_area.csv")
-
-    print(f"Pronto: {len(df_todos)} estado | {len(df_regiao)} região | {len(df_area)} na área")
