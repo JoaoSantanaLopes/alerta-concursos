@@ -44,8 +44,13 @@ def main():
 
         print(f"Enviando {len(df_novos)} concurso(s)...")
         notificador = criar_notificador(cfg.notificacao)
-        notificador.enviar(df_novos)
-        salvar_notificados(df_novos, repo)
+        df_enviados = notificador.enviar(df_novos)
+
+        if not df_enviados.empty:
+            salvar_notificados(df_enviados, repo)
+            print(f"{len(df_enviados)} de {len(df_novos)} concurso(s) notificados com sucesso.")
+        else:
+            print("Nenhum concurso foi notificado com sucesso.")
     finally:
         repo.fechar()
 

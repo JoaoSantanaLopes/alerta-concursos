@@ -1,9 +1,7 @@
 """
 Módulo de análise de editais por IA.
-Tipo de analisador, modelo e prompt vêm do config.yaml.
-Credencial (API key) vem do .env.
+Recebe preferências e credenciais via Config.
 """
-import os
 from abc import ABC, abstractmethod
 import requests
 from bs4 import BeautifulSoup
@@ -20,7 +18,6 @@ class Analyzer(ABC):
         pass
 
     def _buscar_link_edital(self, url):
-        """Visita a página da notícia e pega o primeiro PDF de edital."""
         try:
             html = requests.get(url, headers=HEADERS, timeout=30).text
             soup = BeautifulSoup(html, "html.parser")
@@ -36,7 +33,6 @@ class Analyzer(ABC):
             return None
 
     def _baixar_pdf(self, url):
-        """Baixa o PDF e retorna os bytes."""
         try:
             resp = requests.get(url, headers=HEADERS, timeout=60)
             if resp.status_code == 200 and len(resp.content) > 0:
@@ -44,6 +40,7 @@ class Analyzer(ABC):
             return None
         except Exception:
             return None
+
 
 class GeminiAnalyzer(Analyzer):
     def __init__(self, api_key: str, modelo: str, prompt: str):
@@ -59,7 +56,10 @@ class GeminiAnalyzer(Analyzer):
         pdf_bytes = self._baixar_pdf(pdf_url)
         if not pdf_bytes:
             return "Não foi possível baixar o edital."
-        return self._enviar_para_gemini(pdf_bytes)
+        try:
+            return self._enviar_para_gemini(pdf_bytes)
+        except Exception as e:
+            return f"⚠️ Erro ao analisar edital: {type(e).__name__}: {e}"
 
     def _enviar_para_gemini(self, pdf_bytes):
         from google.genai import types
@@ -75,9 +75,5 @@ class GeminiAnalyzer(Analyzer):
 
 def criar_analisador(cfg: AnaliseIAConfig) -> Analyzer:
     if cfg.tipo == "gemini":
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY não definida no .env")
-        return GeminiAnalyzer(api_key, cfg.modelo, cfg.prompt)
-
+        return GeminiAnalyzer(cfg.gemini_api_key, cfg.modelo, cfg.prompt)
     raise ValueError(f"analise_ia.tipo '{cfg.tipo}' não suportado")

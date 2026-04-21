@@ -73,7 +73,8 @@ def buscar_cargos(url: str) -> list[str]:
         if not ul:
             return []
         return [li.get_text(strip=True) for li in ul.find_all("li")]
-    except Exception:
+    except Exception as e:
+        print(f"  ⚠️ Erro ao buscar cargos de {url}: {e}")
         return []
 
 

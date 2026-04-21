@@ -1,17 +1,18 @@
 """
 Módulo de notificação.
-Preferência de canal e hostname SMTP vêm do config.yaml.
-Segredos e dados pessoais (token, chat_id, email, senha) vêm do .env.
+Recebe credenciais e preferências via Config.
 """
-import os
 import smtplib
 from abc import ABC, abstractmethod
 from email.mime.text import MIMEText
-
 import pandas as pd
 import requests
-
-from config import EmailConfig, NotificacaoConfig
+from config import (
+    EmailCredentials,
+    EmailServerConfig,
+    NotificacaoConfig,
+    TelegramCredentials,
+)
 
 
 # === FORMATAÇÃO ===
@@ -43,28 +44,42 @@ def _formatar_analise(row):
 
 class Notifier(ABC):
     @abstractmethod
-    def enviar(self, df: pd.DataFrame) -> None:
+    def enviar(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Retorna o DataFrame dos itens efetivamente enviados."""
         pass
 
 
 class TelegramNotifier(Notifier):
-    def __init__(self, token: str, chat_id: str):
-        self.chat_id = chat_id
-        self.url = f"https://api.telegram.org/bot{token}/sendMessage"
+    def __init__(self, creds: TelegramCredentials):
+        self.chat_id = creds.chat_id
+        self.url = f"https://api.telegram.org/bot{creds.bot_token}/sendMessage"
 
     def enviar(self, df):
         if df.empty:
-            return
-        self._postar(f"🔔 *{len(df)} concurso(s) novo(s)!*", markdown=True)
-        for _, row in df.iterrows():
-            tem_analise = "Análise IA" in row and pd.notna(row["Análise IA"])
-            if tem_analise:
-                msg = _formatar_analise(row)
-                if len(msg.encode("utf-8")) > 4000:
-                    msg = msg[:2000] + "\n\n... (análise truncada)"
-                self._postar(msg, markdown=False)
-            else:
-                self._postar(_formatar(row), markdown=True)
+            return df
+
+        try:
+            self._postar(f"🔔 *{len(df)} concurso(s) novo(s)!*", markdown=True)
+        except Exception as e:
+            print(f"⚠️ Falha no cabeçalho Telegram: {e}")
+            # segue tentando os itens mesmo assim
+
+        enviados_idx = []
+        for idx, row in df.iterrows():
+            try:
+                tem_analise = "Análise IA" in row and pd.notna(row["Análise IA"])
+                if tem_analise:
+                    msg = _formatar_analise(row)
+                    if len(msg.encode("utf-8")) > 4000:
+                        msg = msg[:2000] + "\n\n... (análise truncada)"
+                    self._postar(msg, markdown=False)
+                else:
+                    self._postar(_formatar(row), markdown=True)
+                enviados_idx.append(idx)
+            except Exception as e:
+                print(f"⚠️ Falha ao enviar '{row['Concurso']}': {e}")
+
+        return df.loc[enviados_idx]
 
     def _postar(self, texto, markdown=True):
         payload = {
@@ -80,12 +95,12 @@ class TelegramNotifier(Notifier):
 
 
 class EmailNotifier(Notifier):
-    def __init__(self, cfg: EmailConfig, user: str, password: str, destinatario: str):
-        self.smtp_host = cfg.smtp_host
-        self.smtp_port = cfg.smtp_port
-        self.user = user
-        self.password = password
-        self.destinatario = destinatario
+    def __init__(self, server: EmailServerConfig, creds: EmailCredentials):
+        self.smtp_host = server.smtp_host
+        self.smtp_port = server.smtp_port
+        self.user = creds.user
+        self.password = creds.password
+        self.destinatario = creds.destinatario
 
     def enviar(self, df):
         if df.empty:
@@ -104,28 +119,20 @@ class EmailNotifier(Notifier):
         msg["From"] = self.user
         msg["To"] = self.destinatario
 
-        with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-            server.starttls()
-            server.login(self.user, self.password)
-            server.send_message(msg)
+        try:
+            with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
+                server.starttls()
+                server.login(self.user, self.password)
+                server.send_message(msg)
+            return df
+        except Exception as e:
+            print(f"⚠️ Falha ao enviar email: {e}")
+            return df.iloc[0:0] 
 
 
 def criar_notificador(cfg: NotificacaoConfig) -> Notifier:
     if cfg.canal == "telegram":
-        token = os.getenv("BOT_TOKEN")
-        chat_id = os.getenv("CHAT_ID")
-        if not token or not chat_id:
-            raise ValueError("BOT_TOKEN e CHAT_ID devem estar definidos no .env")
-        return TelegramNotifier(token, chat_id)
-
+        return TelegramNotifier(cfg.telegram)
     if cfg.canal == "email":
-        if cfg.email is None:
-            raise ValueError("Canal 'email' selecionado mas bloco 'email' ausente no config.yaml")
-        user = os.getenv("SMTP_USER")
-        password = os.getenv("SMTP_PASSWORD")
-        destinatario = os.getenv("EMAIL_TO")
-        if not all([user, password, destinatario]):
-            raise ValueError("SMTP_USER, SMTP_PASSWORD e EMAIL_TO devem estar no .env")
-        return EmailNotifier(cfg.email, user, password, destinatario)
-
+        return EmailNotifier(cfg.email_server, cfg.email)
     raise ValueError(f"Canal '{cfg.canal}' não suportado")
