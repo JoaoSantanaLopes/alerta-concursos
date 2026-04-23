@@ -60,25 +60,27 @@ class EmailServerConfig:
 @dataclass(frozen=True)
 class NotificacaoConfig:
     canal: str                                  # "telegram" ou "email"
-    telegram: TelegramCredentials | None        # preenchido se canal=telegram
-    email_server: EmailServerConfig | None      # preenchido se canal=email
-    email: EmailCredentials | None              # preenchido se canal=email
+    telegram: TelegramCredentials | None
+    email_server: EmailServerConfig | None
+    email: EmailCredentials | None
 
 
 @dataclass(frozen=True)
 class BancoConfig:
     tipo: str                                   # "sqlite" ou "postgres"
-    caminho: str                                # usado se tipo=sqlite
-    postgres: PostgresCredentials | None        # preenchido se tipo=postgres
+    caminho: str
+    postgres: PostgresCredentials | None
 
 
 @dataclass(frozen=True)
 class AnaliseIAConfig:
     habilitado: bool
-    tipo: str                                   # "gemini"
+    tipo: str                                   # "gemini" ou "ollama"
     modelo: str
     prompt: str
-    gemini_api_key: str | None                  # preenchido se habilitado=true
+    gemini_api_key: str | None                  # preenchido se tipo=gemini
+    host: str | None                            # preenchido se tipo=ollama
+    max_chars_edital: int                       # usado por ollama para truncar texto
 
 
 # === Raiz ===
@@ -116,7 +118,6 @@ class Config:
 
 
 # === Helpers privados ===
-# Cada um só lê os envs do contexto que realmente vai ser usado.
 
 def _require_env(nome: str, contexto: str) -> str:
     valor = os.getenv(nome)
@@ -181,13 +182,20 @@ def _build_analise_ia(data: dict) -> AnaliseIAConfig:
     tipo = data.get("tipo", "gemini")
     modelo = data.get("modelo", "gemini-2.5-flash")
     prompt = data.get("prompt", "")
+    host = data.get("host")
+    max_chars_edital = data.get("max_chars_edital", 50000)
 
     gemini_api_key = None
+
     if habilitado:
         if not prompt:
             raise ValueError("analise_ia.prompt é obrigatório quando analise_ia.habilitado=true")
+
         if tipo == "gemini":
             gemini_api_key = _require_env("GEMINI_API_KEY", "analise_ia com tipo=gemini")
+        elif tipo == "ollama":
+            if not modelo:
+                raise ValueError("analise_ia.modelo é obrigatório quando tipo=ollama")
         else:
             raise ValueError(f"analise_ia.tipo '{tipo}' não suportado")
 
@@ -197,4 +205,6 @@ def _build_analise_ia(data: dict) -> AnaliseIAConfig:
         modelo=modelo,
         prompt=prompt,
         gemini_api_key=gemini_api_key,
+        host=host,
+        max_chars_edital=max_chars_edital,
     )

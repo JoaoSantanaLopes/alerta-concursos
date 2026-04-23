@@ -1,8 +1,10 @@
 """
 Módulo de análise de editais por IA.
+Suporta Gemini e Ollama.
 Recebe preferências e credenciais via Config.
 """
 from abc import ABC, abstractmethod
+from io import BytesIO
 import requests
 from bs4 import BeautifulSoup
 from config import AnaliseIAConfig
@@ -18,6 +20,7 @@ class Analyzer(ABC):
         pass
 
     def _buscar_link_edital(self, url):
+        """Visita a página da notícia e pega o primeiro PDF de edital."""
         try:
             html = requests.get(url, headers=HEADERS, timeout=30).text
             soup = BeautifulSoup(html, "html.parser")
@@ -33,6 +36,7 @@ class Analyzer(ABC):
             return None
 
     def _baixar_pdf(self, url):
+        """Baixa o PDF e retorna os bytes."""
         try:
             resp = requests.get(url, headers=HEADERS, timeout=60)
             if resp.status_code == 200 and len(resp.content) > 0:
@@ -73,7 +77,55 @@ class GeminiAnalyzer(Analyzer):
         return response.text
 
 
+class OllamaAnalyzer(Analyzer):
+    def __init__(self, modelo: str, prompt: str, host: str | None, max_chars_edital: int):
+        from ollama import Client
+        # Se host=None, o Client usa o default (http://localhost:11434)
+        self.client = Client(host=host) if host else Client()
+        self.modelo = modelo
+        self.prompt = prompt
+        self.max_chars = max_chars_edital
+
+    def analisar(self, url_noticia):
+        pdf_url = self._buscar_link_edital(url_noticia)
+        if not pdf_url:
+            return "Link do edital não encontrado na página."
+        pdf_bytes = self._baixar_pdf(pdf_url)
+        if not pdf_bytes:
+            return "Não foi possível baixar o edital."
+
+        texto = self._extrair_texto(pdf_bytes)
+        if not texto.strip():
+            return "Edital não contém texto extraível (possivelmente escaneado)."
+
+        if len(texto) > self.max_chars:
+            texto = texto[:self.max_chars] + "\n\n[... edital truncado ...]"
+
+        try:
+            return self._enviar_para_ollama(texto)
+        except Exception as e:
+            return f"⚠️ Erro ao analisar edital: {type(e).__name__}: {e}"
+
+    def _extrair_texto(self, pdf_bytes):
+        """Extrai texto do PDF com pypdf. Retorna string vazia se falhar."""
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(BytesIO(pdf_bytes))
+            return "\n".join(page.extract_text() or "" for page in reader.pages)
+        except Exception:
+            return ""
+
+    def _enviar_para_ollama(self, texto_edital):
+        prompt_completo = f"{self.prompt}\n\n--- EDITAL ---\n{texto_edital}"
+        response = self.client.generate(model=self.modelo, prompt=prompt_completo)
+        return response["response"]
+
+
 def criar_analisador(cfg: AnaliseIAConfig) -> Analyzer:
     if cfg.tipo == "gemini":
         return GeminiAnalyzer(cfg.gemini_api_key, cfg.modelo, cfg.prompt)
+
+    if cfg.tipo == "ollama":
+        return OllamaAnalyzer(cfg.modelo, cfg.prompt, cfg.host, cfg.max_chars_edital)
+
     raise ValueError(f"analise_ia.tipo '{cfg.tipo}' não suportado")

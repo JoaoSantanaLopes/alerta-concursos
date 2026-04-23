@@ -5,3 +5,5 @@ python-dotenv
 psycopg2-binary
 google-genai
 pyyaml
+pypdf
+ollama

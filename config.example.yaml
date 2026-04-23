@@ -124,12 +124,20 @@ banco:
 
 analise_ia:
   habilitado: false
-  tipo: gemini
+  tipo: gemini                      # gemini | ollama
+
+  # Modelo escolhido.
+  # Para gemini: gemini-2.5-flash, gemini-2.5-pro, etc.
+  # Para ollama: gemma3, llama3.1, qwen2.5, etc. (precisa estar puxado via `ollama pull`)
   modelo: gemini-2.5-flash
 
-  # Prompt enviado ao modelo junto com o PDF do edital.
-  # IMPORTANTE: o resultado é enviado direto na notificação.
-  # - NÃO peça markdown (Telegram envia análise como texto puro)
+  # Usados apenas quando tipo=ollama
+  host: http://localhost:11434
+  max_chars_edital: 50000
+
+  # Prompt enviado ao modelo junto com o edital.
+  # IMPORTANTE:
+  # - NÃO peça markdown na resposta (a notificação envia como texto puro)
   # - Mantenha o limite de ~500 palavras (mensagens longas são truncadas)
   prompt: |
     Analise este edital de concurso público e extraia APENAS informações
