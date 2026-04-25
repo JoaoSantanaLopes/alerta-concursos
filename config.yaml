@@ -124,12 +124,12 @@ banco:
 
 analise_ia:
   habilitado: false
-  tipo: gemini                      # gemini | ollama
+  tipo: ollama                      # gemini | ollama
 
   # Modelo escolhido.
   # Para gemini: gemini-2.5-flash, gemini-2.5-pro, etc.
   # Para ollama: gemma3, llama3.1, qwen2.5, etc. (precisa estar puxado via `ollama pull`)
-  modelo: gemini-2.5-flash
+  modelo: llama3.1
 
   # Usados apenas quando tipo=ollama
   host: http://localhost:11434

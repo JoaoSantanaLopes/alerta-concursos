@@ -85,6 +85,7 @@ class OllamaAnalyzer(Analyzer):
         self.modelo = modelo
         self.prompt = prompt
         self.max_chars = max_chars_edital
+        self.num_ctx = (max_chars_edital // 3) + 1024
 
     def analisar(self, url_noticia):
         pdf_url = self._buscar_link_edital(url_noticia)
@@ -117,7 +118,13 @@ class OllamaAnalyzer(Analyzer):
 
     def _enviar_para_ollama(self, texto_edital):
         prompt_completo = f"{self.prompt}\n\n--- EDITAL ---\n{texto_edital}"
-        response = self.client.generate(model=self.modelo, prompt=prompt_completo)
+        response = self.client.generate(
+                    model=self.modelo, 
+                    prompt=prompt_completo,
+                    options={
+                        "num_ctx": self.num_ctx
+                    }
+                )
         return response["response"]
 
 
