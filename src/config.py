@@ -102,7 +102,6 @@ class Config:
         if not yaml_path.exists():
             raise FileNotFoundError(
                 f"{yaml_path} não encontrado. "
-                f"Rode: cp config.example.yaml config.yaml"
             )
 
         data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
