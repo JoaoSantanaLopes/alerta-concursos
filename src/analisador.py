@@ -19,8 +19,11 @@ class Analyzer(ABC):
     def analisar(self, url_noticia: str) -> str:
         pass
 
+    def fechar(self) -> None:
+        """Libera recursos (memória, conexões). Default: no-op."""
+        pass
+
     def _buscar_link_edital(self, url):
-        """Visita a página da notícia e pega o primeiro PDF de edital."""
         try:
             html = requests.get(url, headers=HEADERS, timeout=30).text
             soup = BeautifulSoup(html, "html.parser")
@@ -36,7 +39,6 @@ class Analyzer(ABC):
             return None
 
     def _baixar_pdf(self, url):
-        """Baixa o PDF e retorna os bytes."""
         try:
             resp = requests.get(url, headers=HEADERS, timeout=60)
             if resp.status_code == 200 and len(resp.content) > 0:
@@ -78,14 +80,15 @@ class GeminiAnalyzer(Analyzer):
 
 
 class OllamaAnalyzer(Analyzer):
-    def __init__(self, modelo: str, prompt: str, host: str | None, max_chars_edital: int):
+    def __init__(self, modelo: str, prompt: str, host: str | None,
+                 max_chars_edital: int, keywords: list[str]):
         from ollama import Client
-        # Se host=None, o Client usa o default (http://localhost:11434)
         self.client = Client(host=host) if host else Client()
         self.modelo = modelo
         self.prompt = prompt
         self.max_chars = max_chars_edital
         self.num_ctx = (max_chars_edital // 3) + 1024
+        self.keywords = keywords
 
     def analisar(self, url_noticia):
         pdf_url = self._buscar_link_edital(url_noticia)
@@ -99,6 +102,8 @@ class OllamaAnalyzer(Analyzer):
         if not texto.strip():
             return "Edital não contém texto extraível (possivelmente escaneado)."
 
+        texto = self._extrair_trechos_relevantes(texto)
+
         if len(texto) > self.max_chars:
             texto = texto[:self.max_chars] + "\n\n[... edital truncado ...]"
 
@@ -106,6 +111,13 @@ class OllamaAnalyzer(Analyzer):
             return self._enviar_para_ollama(texto)
         except Exception as e:
             return f"⚠️ Erro ao analisar edital: {type(e).__name__}: {e}"
+
+    def fechar(self):
+        """Descarrega o modelo da memória do Ollama (keep_alive=0)."""
+        try:
+            self.client.generate(model=self.modelo, prompt="", keep_alive=0)
+        except Exception as e:
+            print(f"⚠️ Falha ao descarregar modelo: {e}")
 
     def _extrair_texto(self, pdf_bytes):
         """Extrai texto do PDF com pypdf. Retorna string vazia se falhar."""
@@ -116,23 +128,63 @@ class OllamaAnalyzer(Analyzer):
         except Exception:
             return ""
 
+    def _extrair_trechos_relevantes(self, texto: str, janela: int = 3000) -> str:
+        """
+        Para cada keyword encontrada no texto, extrai uma janela de chars ao redor.
+        Intervalos sobrepostos são unidos. Se nada bater, retorna texto cru
+        (que será truncado depois pelo limite de max_chars).
+        """
+        if not self.keywords:
+            return texto
+
+        texto_lower = texto.lower()
+        intervalos = []
+
+        for kw in self.keywords:
+            kw_lower = kw.lower()
+            inicio = 0
+            while True:
+                pos = texto_lower.find(kw_lower, inicio)
+                if pos == -1:
+                    break
+                intervalos.append((max(0, pos - janela // 2), pos + janela // 2))
+                inicio = pos + len(kw_lower)
+
+        if not intervalos:
+            return texto
+
+        intervalos.sort()
+        merged = [intervalos[0]]
+        for ini, fim in intervalos[1:]:
+            if ini <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], fim))
+            else:
+                merged.append((ini, fim))
+
+        trechos = [texto[ini:fim] for ini, fim in merged]
+        return "\n\n[...]\n\n".join(trechos)
+
     def _enviar_para_ollama(self, texto_edital):
         prompt_completo = f"{self.prompt}\n\n--- EDITAL ---\n{texto_edital}"
         response = self.client.generate(
-                    model=self.modelo, 
-                    prompt=prompt_completo,
-                    options={
-                        "num_ctx": self.num_ctx
-                    }
-                )
+            model=self.modelo,
+            prompt=prompt_completo,
+            options={"num_ctx": self.num_ctx},
+        )
         return response["response"]
 
 
-def criar_analisador(cfg: AnaliseIAConfig) -> Analyzer:
+def criar_analisador(cfg: AnaliseIAConfig, keywords: list[str] | None = None) -> Analyzer:
     if cfg.tipo == "gemini":
         return GeminiAnalyzer(cfg.gemini_api_key, cfg.modelo, cfg.prompt)
 
     if cfg.tipo == "ollama":
-        return OllamaAnalyzer(cfg.modelo, cfg.prompt, cfg.host, cfg.max_chars_edital)
+        return OllamaAnalyzer(
+            cfg.modelo,
+            cfg.prompt,
+            cfg.host,
+            cfg.max_chars_edital,
+            keywords or [],
+        )
 
     raise ValueError(f"analise_ia.tipo '{cfg.tipo}' não suportado")

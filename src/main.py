@@ -36,11 +36,14 @@ def main():
         if cfg.analise_ia.habilitado:
             from analisador import criar_analisador
             print("Analisando editais com IA...")
-            analisador = criar_analisador(cfg.analise_ia)
-            df_novos["Análise IA"] = [
-                analisador.analisar(row["Link"])
-                for _, row in df_novos.iterrows()
-            ]
+            analisador = criar_analisador(cfg.analise_ia, cfg.area.keywords)
+            try:
+                df_novos["Análise IA"] = [
+                    analisador.analisar(row["Link"])
+                    for _, row in df_novos.iterrows()
+                ]
+            finally:
+                analisador.fechar()
 
         print(f"Enviando {len(df_novos)} concurso(s)...")
         notificador = criar_notificador(cfg.notificacao)
